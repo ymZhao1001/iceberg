@@ -21,7 +21,12 @@ package org.apache.iceberg.spark.source;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
@@ -74,8 +79,9 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering,
   private List<FileScanTask> files = null; // lazy cache of files
   private List<CombinedScanTask> tasks = null; // lazy cache of tasks
 
-  SparkBatchQueryScan(SparkSession spark, Table table, TableScan scan, SparkReadConf readConf,
-                      Schema expectedSchema, List<Expression> filters) {
+  SparkBatchQueryScan(
+      SparkSession spark, Table table, TableScan scan, SparkReadConf readConf,
+      Schema expectedSchema, List<Expression> filters) {
 
     super(spark, table, readConf, expectedSchema, filters);
 
@@ -222,16 +228,13 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering,
   public Statistics estimateStatistics() {
     if (scan == null) {
       return estimateStatistics(null);
-
     } else if (snapshotId != null) {
       Snapshot snapshot = table().snapshot(snapshotId);
       return estimateStatistics(snapshot);
-
     } else if (asOfTimestamp != null) {
       long snapshotIdAsOfTime = SnapshotUtil.snapshotIdAsOfTime(table(), asOfTimestamp);
       Snapshot snapshot = table().snapshot(snapshotIdAsOfTime);
       return estimateStatistics(snapshot);
-
     } else {
       Snapshot snapshot = table().currentSnapshot();
       return estimateStatistics(snapshot);
@@ -282,10 +285,10 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering,
 
     private static final Logger LOG = LoggerFactory.getLogger(SingleClusteredColumnPartitioning.class);
 
-    Table table;
-    int numPartitions;
+    private final Table table;
+    private final int numPartitions;
 
-    SingleClusteredColumnPartitioning(Table table,int numPartitions) {
+    SingleClusteredColumnPartitioning(Table table, int numPartitions) {
       this.table = table;
       this.numPartitions = numPartitions;
     }
@@ -298,9 +301,13 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering,
     @Override
     public boolean satisfy(Distribution distribution) {
       if (distribution instanceof ClusteredDistribution) {
-        LOG.info("SupportsReportPartitioning SingleClusteredColumnPartitioning table {} numPartitions {}", table.name(), numPartitions);
+        LOG.info(
+            "SupportsReportPartitioning SingleClusteredColumnPartitioning table {} numPartitions {}",
+            table.name(),
+            numPartitions);
         String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
-        List<String> partitionKeys = this.table.spec().fields().stream().map(PartitionField::name).collect(Collectors.toList());
+        List<String> partitionKeys =
+            this.table.spec().fields().stream().map(PartitionField::name).collect(Collectors.toList());
         LOG.info("clusteredCols :  {} --- partitionKeys : {}", clusteredCols, partitionKeys);
         return Arrays.asList(clusteredCols).containsAll(partitionKeys);
       }
