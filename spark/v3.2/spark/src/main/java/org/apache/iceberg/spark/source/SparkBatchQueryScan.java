@@ -21,11 +21,7 @@ package org.apache.iceberg.spark.source;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
@@ -54,12 +50,16 @@ import org.apache.iceberg.util.TableScanUtil;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.read.Statistics;
+import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering;
+import org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution;
+import org.apache.spark.sql.connector.read.partitioning.Distribution;
+import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 import org.apache.spark.sql.sources.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering {
+class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering, SupportsReportPartitioning {
 
   private static final Logger LOG = LoggerFactory.getLogger(SparkBatchQueryScan.class);
 
@@ -271,5 +271,40 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
     return String.format(
         "IcebergScan(table=%s, type=%s, filters=%s, runtimeFilters=%s, caseSensitive=%s)",
         table(), expectedSchema().asStruct(), filterExpressions(), runtimeFilterExpressions, caseSensitive());
+  }
+
+  @Override
+  public Partitioning outputPartitioning() {
+    return new SingleClusteredColumnPartitioning(table(), tasks.size());
+  }
+
+  static class SingleClusteredColumnPartitioning implements Partitioning {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SingleClusteredColumnPartitioning.class);
+
+    Table table;
+    int numPartitions;
+
+    SingleClusteredColumnPartitioning(Table table,int numPartitions) {
+      this.table = table;
+      this.numPartitions = numPartitions;
+    }
+
+    @Override
+    public int numPartitions() {
+      return this.numPartitions;
+    }
+
+    @Override
+    public boolean satisfy(Distribution distribution) {
+      if (distribution instanceof ClusteredDistribution) {
+        LOG.info("SupportsReportPartitioning SingleClusteredColumnPartitioning table {} numPartitions {}", table.name(), numPartitions);
+        String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
+        List<String> partitionKeys = this.table.spec().fields().stream().map(PartitionField::name).collect(Collectors.toList());
+        LOG.info("clusteredCols :  {} --- partitionKeys : {}", clusteredCols, partitionKeys);
+        return Arrays.asList(clusteredCols).containsAll(partitionKeys);
+      }
+      return false;
+    }
   }
 }
