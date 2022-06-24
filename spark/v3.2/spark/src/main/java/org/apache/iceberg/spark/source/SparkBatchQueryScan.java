@@ -278,7 +278,7 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering,
 
   @Override
   public Partitioning outputPartitioning() {
-    return new SingleClusteredColumnPartitioning(table(), 1);
+    return new SingleClusteredColumnPartitioning(table(), tasks().size());
   }
 
   static class SingleClusteredColumnPartitioning implements Partitioning {
