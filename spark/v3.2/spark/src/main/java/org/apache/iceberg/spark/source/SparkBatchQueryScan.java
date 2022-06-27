@@ -64,7 +64,7 @@ import org.apache.spark.sql.sources.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering, SupportsReportPartitioning {
+class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering {
 
   private static final Logger LOG = LoggerFactory.getLogger(SparkBatchQueryScan.class);
 
@@ -276,42 +276,4 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering,
         table(), expectedSchema().asStruct(), filterExpressions(), runtimeFilterExpressions, caseSensitive());
   }
 
-  @Override
-  public Partitioning outputPartitioning() {
-    return new SingleClusteredColumnPartitioning(table(), tasks().size());
-  }
-
-  static class SingleClusteredColumnPartitioning implements Partitioning {
-
-    private static final Logger LOG = LoggerFactory.getLogger(SingleClusteredColumnPartitioning.class);
-
-    private final Table table;
-    private final int numPartitions;
-
-    SingleClusteredColumnPartitioning(Table table, int numPartitions) {
-      this.table = table;
-      this.numPartitions = numPartitions;
-    }
-
-    @Override
-    public int numPartitions() {
-      return this.numPartitions;
-    }
-
-    @Override
-    public boolean satisfy(Distribution distribution) {
-      if (distribution instanceof ClusteredDistribution) {
-        LOG.info(
-            "SupportsReportPartitioning SingleClusteredColumnPartitioning table {} numPartitions {}",
-            table.name(),
-            numPartitions);
-        String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
-        List<String> partitionKeys =
-            this.table.spec().fields().stream().map(PartitionField::name).collect(Collectors.toList());
-        LOG.info("clusteredCols :  {} --- partitionKeys : {}", clusteredCols, partitionKeys);
-        return Arrays.asList(clusteredCols).containsAll(partitionKeys);
-      }
-      return false;
-    }
-  }
 }

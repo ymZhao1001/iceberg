@@ -20,12 +20,14 @@
 package org.apache.iceberg.spark.source;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
@@ -50,14 +52,18 @@ import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.Statistics;
+import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
 import org.apache.spark.sql.connector.read.SupportsReportStatistics;
+import org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution;
+import org.apache.spark.sql.connector.read.partitioning.Distribution;
+import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-abstract class SparkScan implements Scan, SupportsReportStatistics {
+abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsReportPartitioning {
   private static final Logger LOG = LoggerFactory.getLogger(SparkScan.class);
 
   private final JavaSparkContext sparkContext;
@@ -159,6 +165,11 @@ abstract class SparkScan implements Scan, SupportsReportStatistics {
   }
 
   @Override
+  public Partitioning outputPartitioning() {
+    return new ClusteredColumnPartitioning(table(), tasks().size());
+  }
+
+  @Override
   public String description() {
     String filters = filterExpressions.stream().map(Spark3Util::describe).collect(Collectors.joining(", "));
     return String.format("%s [filters=%s]", table, filters);
@@ -252,6 +263,40 @@ abstract class SparkScan implements Scan, SupportsReportStatistics {
         this.expectedSchema = SchemaParser.fromJson(expectedSchemaString);
       }
       return expectedSchema;
+    }
+  }
+
+  static class ClusteredColumnPartitioning implements Partitioning {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ClusteredColumnPartitioning.class);
+
+    private final Table table;
+    private final int numPartitions;
+
+    ClusteredColumnPartitioning(Table table, int numPartitions) {
+      this.table = table;
+      this.numPartitions = numPartitions;
+    }
+
+    @Override
+    public int numPartitions() {
+      return this.numPartitions;
+    }
+
+    @Override
+    public boolean satisfy(Distribution distribution) {
+      if (distribution instanceof ClusteredDistribution) {
+        LOG.info(
+            "SupportsReportPartitioning ClusteredColumnPartitioning table {} numPartitions {}",
+            table.name(),
+            numPartitions);
+        String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
+        List<String> partitionKeys =
+            this.table.spec().fields().stream().map(PartitionField::name).collect(Collectors.toList());
+        LOG.info("clusteredCols :  {} --- partitionKeys : {}", clusteredCols, partitionKeys);
+        return Arrays.asList(clusteredCols).containsAll(partitionKeys);
+      }
+      return false;
     }
   }
 }
