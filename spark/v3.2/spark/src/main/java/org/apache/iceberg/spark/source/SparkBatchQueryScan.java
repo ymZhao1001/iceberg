@@ -19,29 +19,9 @@
 
 package org.apache.iceberg.spark.source;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
-import org.apache.iceberg.CombinedScanTask;
-import org.apache.iceberg.FileScanTask;
-import org.apache.iceberg.PartitionField;
-import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.Schema;
-import org.apache.iceberg.Snapshot;
-import org.apache.iceberg.Table;
-import org.apache.iceberg.TableScan;
+import org.apache.iceberg.*;
 import org.apache.iceberg.exceptions.ValidationException;
-import org.apache.iceberg.expressions.Binder;
-import org.apache.iceberg.expressions.Evaluator;
-import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.expressions.Expressions;
-import org.apache.iceberg.expressions.Projections;
+import org.apache.iceberg.expressions.*;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
@@ -55,14 +35,15 @@ import org.apache.iceberg.util.TableScanUtil;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.read.Statistics;
-import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering;
-import org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution;
-import org.apache.spark.sql.connector.read.partitioning.Distribution;
-import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 import org.apache.spark.sql.sources.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.*;
+import java.util.stream.Collectors;
 
 class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering {
 
