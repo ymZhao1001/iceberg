@@ -63,7 +63,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsReportPartitioning {
+abstract class SparkScan implements Scan, SupportsReportStatistics {
   private static final Logger LOG = LoggerFactory.getLogger(SparkScan.class);
 
   private final JavaSparkContext sparkContext;
@@ -164,10 +164,10 @@ abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsRepo
     return new Stats(sizeInBytes, numRows);
   }
 
-  @Override
-  public Partitioning outputPartitioning() {
-    return new ClusteredColumnPartitioning(table(), tasks().size());
-  }
+  // @Override
+  // public Partitioning outputPartitioning() {
+  //   return new ClusteredColumnPartitioning(table(), tasks().size());
+  // }
 
   @Override
   public String description() {
