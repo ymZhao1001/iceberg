@@ -19,11 +19,14 @@
 
 package org.apache.iceberg.spark.source;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
@@ -55,10 +58,6 @@ import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering;
 import org.apache.spark.sql.sources.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.stream.Collectors;
 
 class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering {
 
@@ -271,5 +270,4 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
         "IcebergScan(table=%s, type=%s, filters=%s, runtimeFilters=%s, caseSensitive=%s)",
         table(), expectedSchema().asStruct(), filterExpressions(), runtimeFilterExpressions, caseSensitive());
   }
-
 }
