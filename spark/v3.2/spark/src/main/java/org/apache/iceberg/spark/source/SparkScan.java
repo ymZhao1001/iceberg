@@ -46,7 +46,6 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReader;
@@ -167,7 +166,7 @@ abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsRepo
 
   @Override
   public Partitioning outputPartitioning() {
-    return (Partitioning) new HashPartitioning(null, tasks().size());
+    return new ClusteredColumnPartitioning(table(), tasks().size());
   }
 
   @Override
