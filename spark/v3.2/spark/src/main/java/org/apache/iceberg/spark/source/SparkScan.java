@@ -46,12 +46,14 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.Statistics;
+import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
 import org.apache.spark.sql.connector.read.SupportsReportStatistics;
 import org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution;
 import org.apache.spark.sql.connector.read.partitioning.Distribution;
@@ -62,7 +64,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-abstract class SparkScan implements Scan, SupportsReportStatistics {
+abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsReportPartitioning {
   private static final Logger LOG = LoggerFactory.getLogger(SparkScan.class);
 
   private final JavaSparkContext sparkContext;
@@ -163,10 +165,10 @@ abstract class SparkScan implements Scan, SupportsReportStatistics {
     return new Stats(sizeInBytes, numRows);
   }
 
-  // @Override
-  // public Partitioning outputPartitioning() {
-  //   return new ClusteredColumnPartitioning(table(), tasks().size());
-  // }
+  @Override
+  public Partitioning outputPartitioning() {
+    return (Partitioning) new HashPartitioning(null, tasks().size());
+  }
 
   @Override
   public String description() {
