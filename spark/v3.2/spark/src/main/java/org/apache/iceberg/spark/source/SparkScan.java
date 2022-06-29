@@ -52,7 +52,6 @@ import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.Statistics;
-import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
 import org.apache.spark.sql.connector.read.SupportsReportStatistics;
 import org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution;
 import org.apache.spark.sql.connector.read.partitioning.Distribution;
@@ -63,7 +62,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsReportPartitioning {
+abstract class SparkScan implements Scan, SupportsReportStatistics {
   private static final Logger LOG = LoggerFactory.getLogger(SparkScan.class);
 
   private final JavaSparkContext sparkContext;
@@ -77,8 +76,9 @@ abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsRepo
   // lazy variables
   private StructType readSchema = null;
 
-  SparkScan(SparkSession spark, Table table, SparkReadConf readConf,
-            Schema expectedSchema, List<Expression> filters) {
+  SparkScan(
+      SparkSession spark, Table table, SparkReadConf readConf,
+      Schema expectedSchema, List<Expression> filters) {
 
     SparkSchemaUtil.validateMetadataColumnReferences(table.schema(), expectedSchema);
 
@@ -122,8 +122,9 @@ abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsRepo
   @Override
   public StructType readSchema() {
     if (readSchema == null) {
-      Preconditions.checkArgument(readTimestampWithoutZone || !SparkUtil.hasTimestampWithoutZone(expectedSchema),
-              SparkUtil.TIMESTAMP_WITHOUT_TIMEZONE_ERROR);
+      Preconditions.checkArgument(
+          readTimestampWithoutZone || !SparkUtil.hasTimestampWithoutZone(expectedSchema),
+          SparkUtil.TIMESTAMP_WITHOUT_TIMEZONE_ERROR);
       this.readSchema = SparkSchemaUtil.convert(expectedSchema);
     }
     return readSchema;
@@ -164,10 +165,10 @@ abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsRepo
     return new Stats(sizeInBytes, numRows);
   }
 
-  @Override
-  public Partitioning outputPartitioning() {
-    return new ClusteredColumnPartitioning(table(), tasks().size());
-  }
+  // @Override
+  // public Partitioning outputPartitioning() {
+  //   return new ClusteredColumnPartitioning(table(), tasks().size());
+  // }
 
   @Override
   public String description() {
@@ -227,8 +228,9 @@ abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsRepo
     private transient Schema expectedSchema = null;
     private transient String[] preferredLocations = null;
 
-    ReadTask(CombinedScanTask task, Broadcast<Table> tableBroadcast, String expectedSchemaString,
-             boolean caseSensitive, boolean localityPreferred) {
+    ReadTask(
+        CombinedScanTask task, Broadcast<Table> tableBroadcast, String expectedSchemaString,
+        boolean caseSensitive, boolean localityPreferred) {
       this.task = task;
       this.tableBroadcast = tableBroadcast;
       this.expectedSchemaString = expectedSchemaString;
