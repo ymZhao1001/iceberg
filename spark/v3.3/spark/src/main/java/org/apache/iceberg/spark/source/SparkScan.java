@@ -170,7 +170,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
     List<PartitionField> keys = table.spec().fields();
     org.apache.spark.sql.connector.expressions.Expression[] clustering = new Transform[keys.size()];
     for (int i = 0; i < keys.size(); i++) {
-      clustering[i] = Expressions.identity(keys.get(i).name());
+      clustering[i] = Expressions.identity("step_id");
     }
     return new KeyGroupedPartitioning(clustering, tasks().size());
   }
