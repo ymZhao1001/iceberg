@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
-import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
@@ -45,7 +44,6 @@ import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.HasPartitionKey;
@@ -166,12 +164,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
 
   @Override
   public Partitioning outputPartitioning() {
-    // Transform[] clustering = Spark3Util.toTransforms(table.spec());
-    List<PartitionField> keys = table.spec().fields();
-    org.apache.spark.sql.connector.expressions.Expression[] clustering = new Transform[keys.size()];
-    for (int i = 0; i < keys.size(); i++) {
-      clustering[i] = Expressions.identity("step_id");
-    }
+    Transform[] clustering = Spark3Util.toTransforms(table.spec());
     return new KeyGroupedPartitioning(clustering, tasks().size());
   }
 
