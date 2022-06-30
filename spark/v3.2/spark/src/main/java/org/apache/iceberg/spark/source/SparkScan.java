@@ -42,7 +42,6 @@ import org.apache.iceberg.spark.SparkReadConf;
 import org.apache.iceberg.spark.SparkSchemaUtil;
 import org.apache.iceberg.spark.SparkUtil;
 import org.apache.iceberg.util.PropertyUtil;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -64,9 +63,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsReportPartitioning {
+
   private static final Logger LOG = LoggerFactory.getLogger(SparkScan.class);
 
-  private final JavaSparkContext sparkContext;
   private final Table table;
   private final SparkReadConf readConf;
   private final boolean caseSensitive;
@@ -75,14 +74,14 @@ abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsRepo
   private final boolean readTimestampWithoutZone;
 
   // lazy variables
-  private StructType readSchema = null;
+  private StructType readSchema;
 
   SparkScan(SparkSession spark, Table table, SparkReadConf readConf,
             Schema expectedSchema, List<Expression> filters) {
+    super(spark, table, readConf, expectedSchema);
 
     SparkSchemaUtil.validateMetadataColumnReferences(table.schema(), expectedSchema);
 
-    this.sparkContext = JavaSparkContext.fromSparkContext(spark.sparkContext());
     this.table = table;
     this.readConf = readConf;
     this.caseSensitive = readConf.caseSensitive();
@@ -107,16 +106,14 @@ abstract class SparkScan implements Scan, SupportsReportStatistics, SupportsRepo
     return filterExpressions;
   }
 
-  protected abstract List<CombinedScanTask> tasks();
-
   @Override
   public Batch toBatch() {
-    return new SparkBatch(sparkContext, table, readConf, tasks(), expectedSchema);
+    return this;
   }
 
   @Override
   public MicroBatchStream toMicroBatchStream(String checkpointLocation) {
-    return new SparkMicroBatchStream(sparkContext, table, readConf, expectedSchema, checkpointLocation);
+    return new SparkMicroBatchStream(sparkContext(), table, readConf, expectedSchema, checkpointLocation);
   }
 
   @Override
