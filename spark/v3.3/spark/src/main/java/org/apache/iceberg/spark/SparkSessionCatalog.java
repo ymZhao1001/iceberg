@@ -377,7 +377,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public UnboundFunction loadFunction(Identifier ident) throws NoSuchFunctionException {
-    if (Objects.nonNull(ident) && "bukcet".equals(ident.name())) {
+    if (Objects.nonNull(ident) && "bucket".equals(ident.name())) {
       return new UnboundFunction() {
         @Override
         public BoundFunction bind(StructType inputType) {
