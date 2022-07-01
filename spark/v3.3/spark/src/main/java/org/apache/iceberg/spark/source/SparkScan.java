@@ -35,6 +35,7 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.Util;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.apache.iceberg.spark.IcebergSpark;
 import org.apache.iceberg.spark.Spark3Util;
 import org.apache.iceberg.spark.SparkReadConf;
 import org.apache.iceberg.spark.SparkSchemaUtil;
@@ -44,6 +45,7 @@ import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.HasPartitionKey;
 import org.apache.spark.sql.connector.read.InputPartition;
@@ -53,8 +55,10 @@ import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.Statistics;
 import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
 import org.apache.spark.sql.connector.read.SupportsReportStatistics;
+import org.apache.spark.sql.connector.read.partitioning.KeyGroupedPartitioning;
 import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream;
+import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.slf4j.Logger;
@@ -65,7 +69,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
 
   private final Table table;
   private final SparkReadConf readConf;
-  // private final SparkSession spark;
+  private final SparkSession spark;
   private final boolean caseSensitive;
   private final Schema expectedSchema;
   private final List<Expression> filterExpressions;
@@ -87,7 +91,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
     this.expectedSchema = expectedSchema;
     this.filterExpressions = filters != null ? filters : Collections.emptyList();
     this.readTimestampWithoutZone = readConf.handleTimestampWithoutZone();
-    // this.spark = spark;
+    this.spark = spark;
   }
 
   protected Table table() {
@@ -164,23 +168,9 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
 
   @Override
   public Partitioning outputPartitioning() {
-    // IcebergSpark.registerBucketUDF(spark, "bucket", DataTypes.IntegerType, 8);
-    // Transform[] clustering = Spark3Util.toTransforms(table.spec());
-    // return new KeyGroupedPartitioning(clustering, tasks().size());
-    return new ClusteredColumnPartitioning(tasks().size());
-  }
-
-  static class ClusteredColumnPartitioning implements Partitioning {
-    private static final Logger LOG = LoggerFactory.getLogger(SparkScan.ClusteredColumnPartitioning.class);
-    private final int numPartitions;
-
-    ClusteredColumnPartitioning(int numPartitions) {
-      this.numPartitions = numPartitions;
-    }
-
-    public int numPartitions() {
-      return this.numPartitions;
-    }
+    IcebergSpark.registerBucketUDF(spark, "bucket", DataTypes.IntegerType, 8);
+    Transform[] clustering = Spark3Util.toTransforms(table.spec());
+    return new KeyGroupedPartitioning(clustering, tasks().size());
   }
 
   @Override
