@@ -168,7 +168,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
 
   @Override
   public Partitioning outputPartitioning() {
-    IcebergSpark.registerBucketUDF(spark, "bucket", DataTypes.IntegerType, 8);
+    // IcebergSpark.registerBucketUDF(spark, "bucket", DataTypes.IntegerType, 8);
     Transform[] clustering = Spark3Util.toTransforms(table.spec());
     return new KeyGroupedPartitioning(clustering, tasks().size());
   }

@@ -20,6 +20,7 @@
 package org.apache.iceberg.spark;
 
 import java.util.Map;
+import java.util.Objects;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.CatalogProperties;
@@ -43,8 +44,11 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCatalog;
 import org.apache.spark.sql.connector.catalog.TableChange;
+import org.apache.spark.sql.connector.catalog.functions.BoundFunction;
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction;
 import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -70,7 +74,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
    * <p>
    * The default implementation creates a new SparkCatalog with the session catalog's name and options.
    *
-   * @param name catalog name
+   * @param name    catalog name
    * @param options catalog options
    * @return a SparkCatalog to be used for Iceberg tables
    */
@@ -163,8 +167,9 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
   }
 
   @Override
-  public Table createTable(Identifier ident, StructType schema, Transform[] partitions,
-                           Map<String, String> properties)
+  public Table createTable(
+      Identifier ident, StructType schema, Transform[] partitions,
+      Map<String, String> properties)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
     String provider = properties.get("provider");
     if (useIceberg(provider)) {
@@ -176,8 +181,9 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
   }
 
   @Override
-  public StagedTable stageCreate(Identifier ident, StructType schema, Transform[] partitions,
-                                 Map<String, String> properties)
+  public StagedTable stageCreate(
+      Identifier ident, StructType schema, Transform[] partitions,
+      Map<String, String> properties)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
     String provider = properties.get("provider");
     TableCatalog catalog;
@@ -196,8 +202,9 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
   }
 
   @Override
-  public StagedTable stageReplace(Identifier ident, StructType schema, Transform[] partitions,
-                                  Map<String, String> properties)
+  public StagedTable stageReplace(
+      Identifier ident, StructType schema, Transform[] partitions,
+      Map<String, String> properties)
       throws NoSuchNamespaceException, NoSuchTableException {
     String provider = properties.get("provider");
     TableCatalog catalog;
@@ -219,7 +226,6 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
       // create the table with the session catalog, then wrap it in a staged table that will delete to roll back
       Table table = catalog.createTable(ident, schema, partitions, properties);
       return new RollbackStagedTable(catalog, ident, table);
-
     } catch (TableAlreadyExistsException e) {
       // the table was deleted, but now already exists again. retry the replace.
       return stageReplace(ident, schema, partitions, properties);
@@ -227,8 +233,9 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
   }
 
   @Override
-  public StagedTable stageCreateOrReplace(Identifier ident, StructType schema, Transform[] partitions,
-                                          Map<String, String> properties) throws NoSuchNamespaceException {
+  public StagedTable stageCreateOrReplace(
+      Identifier ident, StructType schema, Transform[] partitions,
+      Map<String, String> properties) throws NoSuchNamespaceException {
     String provider = properties.get("provider");
     TableCatalog catalog;
     if (useIceberg(provider)) {
@@ -247,7 +254,6 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
       // create the table with the session catalog, then wrap it in a staged table that will delete to roll back
       Table sessionCatalogTable = catalog.createTable(ident, schema, partitions, properties);
       return new RollbackStagedTable(catalog, ident, sessionCatalogTable);
-
     } catch (TableAlreadyExistsException e) {
       // the table was deleted, but now already exists again. retry the replace.
       return stageCreateOrReplace(ident, schema, partitions, properties);
@@ -358,7 +364,8 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public Catalog icebergCatalog() {
-    Preconditions.checkArgument(icebergCatalog instanceof HasIcebergCatalog,
+    Preconditions.checkArgument(
+        icebergCatalog instanceof HasIcebergCatalog,
         "Cannot return underlying Iceberg Catalog, wrapped catalog does not contain an Iceberg Catalog");
     return ((HasIcebergCatalog) icebergCatalog).icebergCatalog();
   }
@@ -370,6 +377,39 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public UnboundFunction loadFunction(Identifier ident) throws NoSuchFunctionException {
+    if (Objects.nonNull(ident) && "bukcet".equals(ident.name())) {
+      return new UnboundFunction() {
+        @Override
+        public BoundFunction bind(StructType inputType) {
+          return new BoundFunction() {
+            @Override
+            public DataType[] inputTypes() {
+              return new DataType[0];
+            }
+
+            @Override
+            public DataType resultType() {
+              return DataTypes.IntegerType;
+            }
+
+            @Override
+            public String name() {
+              return "bucket";
+            }
+          };
+        }
+
+        @Override
+        public String description() {
+          return "bucket";
+        }
+
+        @Override
+        public String name() {
+          return "bucket";
+        }
+      };
+     }
     throw new NoSuchFunctionException(ident);
   }
 }
