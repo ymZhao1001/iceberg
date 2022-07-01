@@ -20,7 +20,6 @@
 package org.apache.iceberg.spark;
 
 import java.util.Map;
-import java.util.Objects;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.CatalogProperties;
@@ -377,7 +376,9 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public UnboundFunction loadFunction(Identifier ident) throws NoSuchFunctionException {
-    if (Objects.nonNull(ident) && "bucket".equals(ident.name())) {
+    Preconditions.checkNotNull(ident, "ident can not be null.");
+
+    if ("bucket".equals(ident.name())) {
       return new UnboundFunction() {
         @Override
         public BoundFunction bind(StructType inputType) {
@@ -409,7 +410,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
           return "bucket";
         }
       };
-     }
+    }
     throw new NoSuchFunctionException(ident);
   }
 }
