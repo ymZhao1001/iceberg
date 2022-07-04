@@ -289,7 +289,8 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
         List<String> partitionKeys =
             (List) this.table.spec().fields().stream().map(PartitionField::name).collect(Collectors.toList());
         LOG.info("clusteredCols :  {} --- partitionKeys : {}", clusteredCols, partitionKeys);
-        return Arrays.asList(clusteredCols).containsAll(partitionKeys);
+        return true;
+        // return Arrays.asList(clusteredCols).containsAll(partitionKeys);
       } else {
         return false;
       }
