@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -139,16 +140,19 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
     return tasks;
   }
 
-  private Map<Integer, List<FileScanTask>> specFiles = null;
+  private Map<String, List<FileScanTask>> specFiles = null;
 
-  private Map<Integer, List<FileScanTask>> specFiles() {
+  private Map<String, List<FileScanTask>> specFiles() {
     if (specFiles == null) {
-      Map<Integer, List<FileScanTask>> specFilesMap =
-          files().stream().collect(Collectors.groupingBy(it -> it.file().specId()));
+      Map<String, List<FileScanTask>> specFilesMap =
+          files().stream().collect(Collectors.groupingBy(it -> {
+            PartitionData original = (PartitionData) it.file().partition();
+            return (String) original.get(0);
+          }));
       specFiles = specFilesMap;
     }
     List<CombinedScanTask> taskList = Lists.newArrayList();
-    for (Map.Entry<Integer, List<FileScanTask>> entry : specFiles.entrySet()) {
+    for (Map.Entry<String, List<FileScanTask>> entry : specFiles.entrySet()) {
       CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
           CloseableIterable.withNoopClose(entry.getValue()),
           scan.targetSplitSize());
