@@ -42,7 +42,6 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.io.CloseableIterable;
-import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
@@ -160,6 +159,7 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
         tasks.add(scanTask);
       }
     }
+    System.out.println(tasks.size());
 
     return specFiles;
   }
