@@ -71,6 +71,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
   private final Schema expectedSchema;
   private final List<Expression> filterExpressions;
   private final boolean readTimestampWithoutZone;
+  private static boolean reportOutPartitioning = false;
 
   // lazy variables
   private StructType readSchema;
@@ -88,6 +89,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
     this.expectedSchema = expectedSchema;
     this.filterExpressions = filters != null ? filters : Collections.emptyList();
     this.readTimestampWithoutZone = readConf.handleTimestampWithoutZone();
+    reportOutPartitioning = readConf.reportOutPartitioning();
   }
 
   protected Table table() {
@@ -280,14 +282,15 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
     }
 
     public boolean satisfy(Distribution distribution) {
+      if (!reportOutPartitioning) {
+        return false;
+      }
       if (distribution instanceof ClusteredDistribution) {
         LOG.info(
             "SupportsReportPartitioning ClusteredColumnPartitioning table {} numPartitions {}",
             this.table.name(),
             this.numPartitions);
         String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
-        // List<String> partitionKeys =
-        //     (List) this.table.spec().fields().stream().map(PartitionField::name).collect(Collectors.toList());
         List<String> partitionKeys = this.table.spec().fields().stream().map(it -> {
           if (it.transform() instanceof Bucket) {
             return it.name().replace("_bucket", "");
@@ -296,7 +299,6 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
           }
         }).collect(Collectors.toList());
         LOG.info("clusteredCols :  {} --- partitionKeys : {}", clusteredCols, partitionKeys);
-        // return true;
         return Arrays.asList(clusteredCols).containsAll(partitionKeys);
       } else {
         return false;

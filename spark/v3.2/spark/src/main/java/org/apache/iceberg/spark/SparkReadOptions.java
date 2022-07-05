@@ -68,6 +68,9 @@ public class SparkReadOptions {
   // Controls whether to allow reading timestamps without zone info
   public static final String HANDLE_TIMESTAMP_WITHOUT_TIMEZONE = "handle-timestamp-without-timezone";
 
+  // Controls whether to report output Partitioning
+  public static final String REPORT_OUTPUT_PARTITIONING = "report-output-partitioning";
+
   // Controls whether to report locality information to Spark while allocating input partitions
   public static final String LOCALITY = "locality";
 

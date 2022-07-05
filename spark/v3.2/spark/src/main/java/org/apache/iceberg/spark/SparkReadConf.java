@@ -219,6 +219,14 @@ public class SparkReadConf {
         .parse();
   }
 
+  public boolean reportOutPartitioning() {
+    return confParser.booleanConf()
+        .option(SparkReadOptions.REPORT_OUTPUT_PARTITIONING)
+        .sessionConf(SparkSQLProperties.REPORT_OUTPUT_PARTITIONING)
+        .defaultValue(SparkSQLProperties.REPORT_OUTPUT_PARTITIONING_DEFAULT)
+        .parse();
+  }
+
   public Long streamFromTimestamp() {
     return confParser.longConf()
         .option(SparkReadOptions.STREAM_FROM_TIMESTAMP)

@@ -31,6 +31,10 @@ public class SparkSQLProperties {
   public static final String HANDLE_TIMESTAMP_WITHOUT_TIMEZONE = "spark.sql.iceberg.handle-timestamp-without-timezone";
   public static final boolean HANDLE_TIMESTAMP_WITHOUT_TIMEZONE_DEFAULT = false;
 
+  // Controls whether to report output Partitioning
+  public static final String REPORT_OUTPUT_PARTITIONING = "spark.sql.iceberg.report-output-partitioning";
+  public static final boolean REPORT_OUTPUT_PARTITIONING_DEFAULT = false;
+
   // Controls whether timestamp types for new tables should be stored with timezone info
   public static final String USE_TIMESTAMP_WITHOUT_TIME_ZONE_IN_NEW_TABLES =
       "spark.sql.iceberg.use-timestamp-without-timezone-in-new-tables";
