@@ -147,7 +147,7 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
           files().stream().collect(Collectors.groupingBy(it -> it.file().specId()));
       specFiles = specFilesMap;
     }
-    List<CombinedScanTask> tasks = Lists.newArrayList();
+    List<CombinedScanTask> taskList = Lists.newArrayList();
     for (Map.Entry<Integer, List<FileScanTask>> entry : specFiles.entrySet()) {
       CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
           CloseableIterable.withNoopClose(entry.getValue()),
@@ -156,10 +156,10 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
           splitFiles, Long.MAX_VALUE,
           scan.splitLookback(), scan.splitOpenFileCost());
       for (CombinedScanTask scanTask : scanTasks) {
-        tasks.add(scanTask);
+        taskList.add(scanTask);
       }
     }
-    System.out.println(tasks.size());
+    LOG.info("size {}", taskList.size());
 
     return specFiles;
   }
