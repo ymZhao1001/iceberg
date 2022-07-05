@@ -40,7 +40,7 @@ import org.apache.iceberg.types.Types;
 
 import static org.apache.iceberg.types.Type.TypeID;
 
-abstract class Bucket<T> implements Transform<T, Integer> {
+public abstract class Bucket<T> implements Transform<T, Integer> {
   private static final HashFunction MURMUR3 = Hashing.murmur3_32_fixed();
 
   @SuppressWarnings("unchecked")

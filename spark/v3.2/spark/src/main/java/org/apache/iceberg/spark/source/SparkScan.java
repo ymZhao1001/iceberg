@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
-import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
@@ -40,6 +39,7 @@ import org.apache.iceberg.spark.Spark3Util;
 import org.apache.iceberg.spark.SparkReadConf;
 import org.apache.iceberg.spark.SparkSchemaUtil;
 import org.apache.iceberg.spark.SparkUtil;
+import org.apache.iceberg.transforms.Bucket;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.SparkSession;
@@ -285,8 +285,15 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
             this.table.name(),
             this.numPartitions);
         String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
-        List<String> partitionKeys =
-            (List) this.table.spec().fields().stream().map(PartitionField::name).collect(Collectors.toList());
+        // List<String> partitionKeys =
+        //     (List) this.table.spec().fields().stream().map(PartitionField::name).collect(Collectors.toList());
+        List<String> partitionKeys = this.table.spec().fields().stream().map(it -> {
+          if (it.transform() instanceof Bucket) {
+            return it.name().replace("_bucket", "");
+          } else {
+            return it.name();
+          }
+        }).collect(Collectors.toList());
         LOG.info("clusteredCols :  {} --- partitionKeys : {}", clusteredCols, partitionKeys);
         return true;
         // return Arrays.asList(clusteredCols).containsAll(partitionKeys);
