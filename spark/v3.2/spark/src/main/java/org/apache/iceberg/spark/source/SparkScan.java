@@ -20,6 +20,7 @@
 package org.apache.iceberg.spark.source;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -295,8 +296,8 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
           }
         }).collect(Collectors.toList());
         LOG.info("clusteredCols :  {} --- partitionKeys : {}", clusteredCols, partitionKeys);
-        return true;
-        // return Arrays.asList(clusteredCols).containsAll(partitionKeys);
+        // return true;
+        return Arrays.asList(clusteredCols).containsAll(partitionKeys);
       } else {
         return false;
       }
