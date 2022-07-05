@@ -42,6 +42,7 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
@@ -74,8 +75,9 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
   private List<FileScanTask> files = null; // lazy cache of files
   private List<CombinedScanTask> tasks = null; // lazy cache of tasks
 
-  SparkBatchQueryScan(SparkSession spark, Table table, TableScan scan, SparkReadConf readConf,
-                      Schema expectedSchema, List<Expression> filters) {
+  SparkBatchQueryScan(
+      SparkSession spark, Table table, TableScan scan, SparkReadConf readConf,
+      Schema expectedSchema, List<Expression> filters) {
 
     super(spark, table, readConf, expectedSchema, filters);
 
@@ -130,10 +132,36 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
       CloseableIterable<CombinedScanTask> scanTasks = TableScanUtil.planTasks(
           splitFiles, scan.targetSplitSize(),
           scan.splitLookback(), scan.splitOpenFileCost());
+
       tasks = Lists.newArrayList(scanTasks);
+      specFiles();
     }
 
     return tasks;
+  }
+
+  private Map<Integer, List<FileScanTask>> specFiles = null;
+
+  private Map<Integer, List<FileScanTask>> specFiles() {
+    if (specFiles == null) {
+      Map<Integer, List<FileScanTask>> specFilesMap =
+          files().stream().collect(Collectors.groupingBy(it -> it.file().specId()));
+      specFiles = specFilesMap;
+    }
+    List<CombinedScanTask> tasks = Lists.newArrayList();
+    for (Map.Entry<Integer, List<FileScanTask>> entry : specFiles.entrySet()) {
+      CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
+          CloseableIterable.withNoopClose(entry.getValue()),
+          scan.targetSplitSize());
+      CloseableIterable<CombinedScanTask> scanTasks = TableScanUtil.planTasks(
+          splitFiles, Long.MAX_VALUE,
+          scan.splitLookback(), scan.splitOpenFileCost());
+      for (CombinedScanTask scanTask : scanTasks) {
+        tasks.add(scanTask);
+      }
+    }
+
+    return specFiles;
   }
 
   @Override
@@ -222,16 +250,13 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
   public Statistics estimateStatistics() {
     if (scan == null) {
       return estimateStatistics(null);
-
     } else if (snapshotId != null) {
       Snapshot snapshot = table().snapshot(snapshotId);
       return estimateStatistics(snapshot);
-
     } else if (asOfTimestamp != null) {
       long snapshotIdAsOfTime = SnapshotUtil.snapshotIdAsOfTime(table(), asOfTimestamp);
       Snapshot snapshot = table().snapshot(snapshotIdAsOfTime);
       return estimateStatistics(snapshot);
-
     } else {
       Snapshot snapshot = table().currentSnapshot();
       return estimateStatistics(snapshot);
