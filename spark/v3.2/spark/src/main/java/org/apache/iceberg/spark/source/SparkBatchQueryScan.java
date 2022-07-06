@@ -76,7 +76,6 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
   private List<FileScanTask> files = null; // lazy cache of files
   private List<CombinedScanTask> tasks = null; // lazy cache of tasks
 
-
   SparkBatchQueryScan(
       SparkSession spark, Table table, TableScan scan, SparkReadConf readConf,
       Schema expectedSchema, List<Expression> filters) {
@@ -145,27 +144,24 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
     return tasks;
   }
 
-  private Map<String, List<FileScanTask>> specFiles = null;
-
   private void specFiles() {
-    if (specFiles == null) {
+    if (tasks == null) {
       Map<String, List<FileScanTask>> specFilesMap =
           files().stream().collect(Collectors.groupingBy(it -> {
             PartitionData original = (PartitionData) it.file().partition();
             return String.valueOf(original.get(0));
           }));
-      specFiles = specFilesMap;
       tasks = Lists.newArrayList();
-    }
-    for (Map.Entry<String, List<FileScanTask>> entry : specFiles.entrySet()) {
-      CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
-          CloseableIterable.withNoopClose(entry.getValue()),
-          scan.targetSplitSize());
-      CloseableIterable<CombinedScanTask> scanTasks = TableScanUtil.planTasks(
-          splitFiles, Long.MAX_VALUE,
-          scan.splitLookback(), scan.splitOpenFileCost());
-      for (CombinedScanTask scanTask : scanTasks) {
-        tasks.add(scanTask);
+      for (Map.Entry<String, List<FileScanTask>> entry : specFilesMap.entrySet()) {
+        CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
+            CloseableIterable.withNoopClose(entry.getValue()),
+            scan.targetSplitSize());
+        CloseableIterable<CombinedScanTask> scanTasks = TableScanUtil.planTasks(
+            splitFiles, Long.MAX_VALUE,
+            scan.splitLookback(), scan.splitOpenFileCost());
+        for (CombinedScanTask scanTask : scanTasks) {
+          tasks.add(scanTask);
+        }
       }
     }
     LOG.info("size {}", tasks.size());
