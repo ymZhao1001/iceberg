@@ -147,7 +147,7 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
       Map<String, List<FileScanTask>> specFilesMap =
           files().stream().collect(Collectors.groupingBy(it -> {
             PartitionData original = (PartitionData) it.file().partition();
-            return (String) original.get(0);
+            return String.valueOf(original.get(0));
           }));
       specFiles = specFilesMap;
     }
