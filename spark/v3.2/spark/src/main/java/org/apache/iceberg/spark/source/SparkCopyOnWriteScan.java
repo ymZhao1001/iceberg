@@ -22,12 +22,15 @@ package org.apache.iceberg.spark.source;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.commons.collections.MapUtils;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataColumns;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
@@ -51,24 +54,28 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
 
   private final TableScan scan;
   private final Snapshot snapshot;
+  private final boolean reportOutPartitioning;
 
   // lazy variables
   private List<FileScanTask> files = null; // lazy cache of files
   private List<CombinedScanTask> tasks = null; // lazy cache of tasks
   private Set<String> filteredLocations = null;
 
-  SparkCopyOnWriteScan(SparkSession spark, Table table, SparkReadConf readConf,
-                       Schema expectedSchema, List<Expression> filters) {
+  SparkCopyOnWriteScan(
+      SparkSession spark, Table table, SparkReadConf readConf,
+      Schema expectedSchema, List<Expression> filters) {
     this(spark, table, null, null, readConf, expectedSchema, filters);
   }
 
-  SparkCopyOnWriteScan(SparkSession spark, Table table, TableScan scan, Snapshot snapshot,
-                       SparkReadConf readConf, Schema expectedSchema, List<Expression> filters) {
+  SparkCopyOnWriteScan(
+      SparkSession spark, Table table, TableScan scan, Snapshot snapshot,
+      SparkReadConf readConf, Schema expectedSchema, List<Expression> filters) {
 
     super(spark, table, readConf, expectedSchema, filters);
 
     this.scan = scan;
     this.snapshot = snapshot;
+    this.reportOutPartitioning = readConf.reportOutPartitioning();
 
     if (scan == null) {
       this.files = Collections.emptyList();
@@ -88,7 +95,7 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
 
   public NamedReference[] filterAttributes() {
     NamedReference file = Expressions.column(MetadataColumns.FILE_PATH.name());
-    return new NamedReference[]{file};
+    return new NamedReference[] {file};
   }
 
   @Override
@@ -132,6 +139,9 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
 
   @Override
   protected synchronized List<CombinedScanTask> tasks() {
+    if (!reportOutPartitioning) {
+      specFiles();
+    }
     if (tasks == null) {
       CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
           CloseableIterable.withNoopClose(files()),
@@ -143,6 +153,31 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
     }
 
     return tasks;
+  }
+
+  private void specFiles() {
+    if (tasks == null) {
+      Map<String, List<FileScanTask>> specFilesMap =
+          files().stream().collect(Collectors.groupingBy(it -> {
+            PartitionData original = (PartitionData) it.file().partition();
+            return String.valueOf(original.get(0));
+          }));
+      if (MapUtils.isEmpty(specFilesMap)) {
+        return;
+      }
+      tasks = Lists.newArrayList();
+      for (Map.Entry<String, List<FileScanTask>> entry : specFilesMap.entrySet()) {
+        CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
+            CloseableIterable.withNoopClose(entry.getValue()),
+            scan.targetSplitSize());
+        CloseableIterable<CombinedScanTask> scanTasks = TableScanUtil.planTasks(
+            splitFiles, Long.MAX_VALUE,
+            scan.splitLookback(), scan.splitOpenFileCost());
+        for (CombinedScanTask scanTask : scanTasks) {
+          tasks.add(scanTask);
+        }
+      }
+    }
   }
 
   @Override
