@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.commons.collections.MapUtils;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionData;
@@ -151,6 +152,9 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
             PartitionData original = (PartitionData) it.file().partition();
             return String.valueOf(original.get(0));
           }));
+      if (MapUtils.isEmpty(specFilesMap)) {
+        return;
+      }
       tasks = Lists.newArrayList();
       for (Map.Entry<String, List<FileScanTask>> entry : specFilesMap.entrySet()) {
         CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
