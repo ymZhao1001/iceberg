@@ -70,10 +70,12 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
   private final Long endSnapshotId;
   private final Long asOfTimestamp;
   private final List<Expression> runtimeFilterExpressions;
+  private final boolean reportOutPartitioning;
 
   private Set<Integer> specIds = null; // lazy cache of scanned spec IDs
   private List<FileScanTask> files = null; // lazy cache of files
   private List<CombinedScanTask> tasks = null; // lazy cache of tasks
+
 
   SparkBatchQueryScan(
       SparkSession spark, Table table, TableScan scan, SparkReadConf readConf,
@@ -87,6 +89,7 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
     this.endSnapshotId = readConf.endSnapshotId();
     this.asOfTimestamp = readConf.asOfTimestamp();
     this.runtimeFilterExpressions = Lists.newArrayList();
+    this.reportOutPartitioning = readConf.reportOutPartitioning();
 
     if (scan == null) {
       this.specIds = Collections.emptySet();
@@ -125,6 +128,9 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
 
   @Override
   protected List<CombinedScanTask> tasks() {
+    if (!reportOutPartitioning) {
+      specFiles();
+    }
     if (tasks == null) {
       CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
           CloseableIterable.withNoopClose(files()),
@@ -134,7 +140,6 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
           scan.splitLookback(), scan.splitOpenFileCost());
 
       tasks = Lists.newArrayList(scanTasks);
-      specFiles();
     }
 
     return tasks;
@@ -142,7 +147,7 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
 
   private Map<String, List<FileScanTask>> specFiles = null;
 
-  private Map<String, List<FileScanTask>> specFiles() {
+  private void specFiles() {
     if (specFiles == null) {
       Map<String, List<FileScanTask>> specFilesMap =
           files().stream().collect(Collectors.groupingBy(it -> {
@@ -150,8 +155,8 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
             return String.valueOf(original.get(0));
           }));
       specFiles = specFilesMap;
+      tasks = Lists.newArrayList();
     }
-    List<CombinedScanTask> taskList = Lists.newArrayList();
     for (Map.Entry<String, List<FileScanTask>> entry : specFiles.entrySet()) {
       CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
           CloseableIterable.withNoopClose(entry.getValue()),
@@ -160,12 +165,10 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
           splitFiles, Long.MAX_VALUE,
           scan.splitLookback(), scan.splitOpenFileCost());
       for (CombinedScanTask scanTask : scanTasks) {
-        taskList.add(scanTask);
+        tasks.add(scanTask);
       }
     }
-    LOG.info("size {}", taskList.size());
-
-    return specFiles;
+    LOG.info("size {}", tasks.size());
   }
 
   @Override
