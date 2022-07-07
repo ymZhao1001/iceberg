@@ -128,7 +128,7 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
 
   @Override
   protected List<CombinedScanTask> tasks() {
-    if (!reportOutPartitioning) {
+    if (reportOutPartitioning) {
       specFiles();
     }
     if (tasks == null) {
