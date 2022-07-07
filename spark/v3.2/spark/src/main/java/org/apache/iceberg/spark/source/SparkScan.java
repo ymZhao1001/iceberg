@@ -166,7 +166,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
 
   @Override
   public Partitioning outputPartitioning() {
-    return new ClusteredColumnPartitioning(table(), tasks().size());
+    return new ClusteredColumnPartitioning(table(), toBatch().planInputPartitions().length);
   }
 
   @Override
