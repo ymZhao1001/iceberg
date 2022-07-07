@@ -47,7 +47,6 @@ import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.read.Statistics;
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering;
-import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.In;
 
