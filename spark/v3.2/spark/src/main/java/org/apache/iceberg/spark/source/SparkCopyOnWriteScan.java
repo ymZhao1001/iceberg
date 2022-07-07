@@ -215,6 +215,6 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
 
   @Override
   public Partitioning outputPartitioning() {
-    return new ClusteredColumnPartitioning(table(), files().size());
+    return new ClusteredColumnPartitioning(table(), files.size());
   }
 }

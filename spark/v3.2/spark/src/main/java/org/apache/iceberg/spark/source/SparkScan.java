@@ -268,7 +268,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
   }
 
   static class ClusteredColumnPartitioning implements Partitioning {
-    private static final Logger LOG = LoggerFactory.getLogger(SparkScan.ClusteredColumnPartitioning.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ClusteredColumnPartitioning.class);
     private final Table table;
     private final int numPartitions;
 
