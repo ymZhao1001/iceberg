@@ -213,8 +213,8 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
         table(), expectedSchema().asStruct(), filterExpressions(), caseSensitive());
   }
 
-  @Override
-  public Partitioning outputPartitioning() {
-    return new ClusteredColumnPartitioning(table(), 0);
-  }
+  // @Override
+  // public Partitioning outputPartitioning() {
+  //   return new ClusteredColumnPartitioning(table(), 0);
+  // }
 }
