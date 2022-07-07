@@ -47,6 +47,7 @@ import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.read.Statistics;
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering;
+import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.In;
 
@@ -210,5 +211,10 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
     return String.format(
         "IcebergCopyOnWriteScan(table=%s, type=%s, filters=%s, caseSensitive=%s)",
         table(), expectedSchema().asStruct(), filterExpressions(), caseSensitive());
+  }
+
+  @Override
+  public Partitioning outputPartitioning() {
+    return new ClusteredColumnPartitioning(table(), files().size());
   }
 }
