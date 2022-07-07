@@ -139,7 +139,7 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
 
   @Override
   protected synchronized List<CombinedScanTask> tasks() {
-    if (!reportOutPartitioning) {
+    if (reportOutPartitioning) {
       specFiles();
     }
     if (tasks == null) {
