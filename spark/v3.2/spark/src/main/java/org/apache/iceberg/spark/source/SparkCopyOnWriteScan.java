@@ -140,7 +140,7 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
   @Override
   protected synchronized List<CombinedScanTask> tasks() {
     if (reportOutPartitioning) {
-      specFiles();
+      specTasks();
     }
     if (tasks == null) {
       CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
@@ -155,7 +155,7 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
     return tasks;
   }
 
-  private void specFiles() {
+  private void specTasks() {
     if (tasks == null) {
       Map<String, List<FileScanTask>> specFilesMap =
           files().stream().collect(Collectors.groupingBy(it -> {

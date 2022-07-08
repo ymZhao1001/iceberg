@@ -129,7 +129,7 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
   @Override
   protected List<CombinedScanTask> tasks() {
     if (reportOutPartitioning) {
-      specFiles();
+      specTasks();
     }
     if (tasks == null) {
       CloseableIterable<FileScanTask> splitFiles = TableScanUtil.splitFiles(
@@ -145,7 +145,7 @@ class SparkBatchQueryScan extends SparkScan implements SupportsRuntimeFiltering 
     return tasks;
   }
 
-  private void specFiles() {
+  private void specTasks() {
     if (tasks == null) {
       Map<String, List<FileScanTask>> specFilesMap =
           files().stream().collect(Collectors.groupingBy(it -> {

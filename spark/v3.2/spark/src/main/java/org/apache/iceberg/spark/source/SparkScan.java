@@ -292,6 +292,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
             this.numPartitions);
         String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
         List<String> partitionKeys = this.table.spec().fields().stream().map(it -> {
+          //TODO 可以进行其他transform类型的处理，例如时间，truncate等
           if (it.transform() instanceof Bucket) {
             return it.name().replace("_bucket", "");
           } else {
