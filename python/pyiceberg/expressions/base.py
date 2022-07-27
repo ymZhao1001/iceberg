@@ -14,10 +14,12 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from enum import Enum, auto
+from dataclasses import dataclass
 from functools import reduce, singledispatch
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from pyiceberg.files import StructProtocol
 from pyiceberg.schema import Accessor, Schema
@@ -25,68 +27,7 @@ from pyiceberg.types import NestedField
 from pyiceberg.utils.singleton import Singleton
 
 T = TypeVar("T")
-
-
-class Operation(Enum):
-    """Operations to be used as components in expressions
-
-    Operations can be negated by calling the negate method.
-    >>> Operation.TRUE.negate()
-    <Operation.FALSE: 2>
-    >>> Operation.IS_NULL.negate()
-    <Operation.NOT_NULL: 4>
-
-    The above example uses the OPERATION_NEGATIONS map which maps each enum
-    to it's opposite enum.
-
-    Raises:
-        ValueError: This is raised when attempting to negate an operation
-            that cannot be negated.
-    """
-
-    TRUE = auto()
-    FALSE = auto()
-    IS_NULL = auto()
-    NOT_NULL = auto()
-    IS_NAN = auto()
-    NOT_NAN = auto()
-    LT = auto()
-    LT_EQ = auto()
-    GT = auto()
-    GT_EQ = auto()
-    EQ = auto()
-    NOT_EQ = auto()
-    IN = auto()
-    NOT_IN = auto()
-    NOT = auto()
-    AND = auto()
-    OR = auto()
-
-    def negate(self) -> "Operation":
-        """Returns the operation used when this is negated."""
-
-        try:
-            return OPERATION_NEGATIONS[self]
-        except KeyError as e:
-            raise ValueError(f"No negation defined for operation {self}") from e
-
-
-OPERATION_NEGATIONS = {
-    Operation.TRUE: Operation.FALSE,
-    Operation.FALSE: Operation.TRUE,
-    Operation.IS_NULL: Operation.NOT_NULL,
-    Operation.NOT_NULL: Operation.IS_NULL,
-    Operation.IS_NAN: Operation.NOT_NAN,
-    Operation.NOT_NAN: Operation.IS_NAN,
-    Operation.LT: Operation.GT_EQ,
-    Operation.LT_EQ: Operation.GT,
-    Operation.GT: Operation.LT_EQ,
-    Operation.GT_EQ: Operation.LT,
-    Operation.EQ: Operation.NOT_EQ,
-    Operation.NOT_EQ: Operation.EQ,
-    Operation.IN: Operation.NOT_IN,
-    Operation.NOT_IN: Operation.IN,
-}
+B = TypeVar("B")
 
 
 class Literal(Generic[T], ABC):
@@ -102,7 +43,7 @@ class Literal(Generic[T], ABC):
         return self._value  # type: ignore
 
     @abstractmethod
-    def to(self, type_var):
+    def to(self, type_var) -> Literal:
         ...  # pragma: no cover
 
     def __repr__(self):
@@ -131,11 +72,169 @@ class Literal(Generic[T], ABC):
 
 
 class BooleanExpression(ABC):
-    """base class for all boolean expressions"""
+    """Represents a boolean expression tree."""
 
     @abstractmethod
-    def __invert__(self) -> "BooleanExpression":
-        ...
+    def __invert__(self) -> BooleanExpression:
+        """Transform the Expression into its negated version."""
+
+
+class Bound(Generic[T], ABC):
+    """Represents a bound value expression."""
+
+    def eval(self, struct: StructProtocol):  # pylint: disable=W0613
+        ...  # pragma: no cover
+
+
+class Unbound(Generic[T, B], ABC):
+    """Represents an unbound expression node."""
+
+    @abstractmethod
+    def bind(self, schema: Schema, case_sensitive: bool) -> B:
+        ...  # pragma: no cover
+
+
+class Term(ABC):
+    """An expression that evaluates to a value."""
+
+
+class BaseReference(Generic[T], Term, ABC):
+    """Represents a variable reference in an expression."""
+
+
+class BoundTerm(Bound[T], Term):
+    """Represents a bound term."""
+
+
+class UnboundTerm(Unbound[T, BoundTerm[T]], Term):
+    """Represents an unbound term."""
+
+
+@dataclass(frozen=True)
+class BoundReference(BoundTerm[T], BaseReference[T]):
+    """A reference bound to a field in a schema
+
+    Args:
+        field (NestedField): A referenced field in an Iceberg schema
+        accessor (Accessor): An Accessor object to access the value at the field's position
+    """
+
+    field: NestedField
+    accessor: Accessor
+
+    def eval(self, struct: StructProtocol) -> T:
+        """Returns the value at the referenced field's position in an object that abides by the StructProtocol
+        Args:
+            struct (StructProtocol): A row object that abides by the StructProtocol and returns values given a position
+        Returns:
+            Any: The value at the referenced field's position in `struct`
+        """
+        return self.accessor.get(struct)
+
+
+@dataclass(frozen=True)
+class Reference(UnboundTerm[T], BaseReference[T]):
+    """A reference not yet bound to a field in a schema
+
+    Args:
+        name (str): The name of the field
+
+    Note:
+        An unbound reference is sometimes referred to as a "named" reference
+    """
+
+    name: str
+
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundReference[T]:
+        """Bind the reference to an Iceberg schema
+
+        Args:
+            schema (Schema): An Iceberg schema
+            case_sensitive (bool): Whether to consider case when binding the reference to the field
+
+        Raises:
+            ValueError: If an empty name is provided
+
+        Returns:
+            BoundReference: A reference bound to the specific field in the Iceberg schema
+        """
+        field = schema.find_field(name_or_id=self.name, case_sensitive=case_sensitive)  # pylint: disable=redefined-outer-name
+
+        if not field:
+            raise ValueError(f"Cannot find field '{self.name}' in schema: {schema}")
+
+        accessor = schema.accessor_for_field(field.field_id)
+
+        if not accessor:
+            raise ValueError(f"Cannot find accessor for field '{self.name}' in schema: {schema}")
+
+        return BoundReference(field=field, accessor=accessor)
+
+
+class BoundPredicate(Bound[T], BooleanExpression):
+    _term: BoundTerm[T]
+    _literals: tuple[Literal[T], ...]
+
+    def __init__(self, term: BoundTerm[T], *literals: Literal[T]):
+        self._term = term
+        self._literals = literals
+        self._validate_literals()
+
+    def _validate_literals(self):
+        if len(self.literals) != 1:
+            raise AttributeError(f"{self.__class__.__name__} must have exactly 1 literal.")
+
+    @property
+    def term(self) -> BoundTerm[T]:
+        return self._term
+
+    @property
+    def literals(self) -> tuple[Literal[T], ...]:
+        return self._literals
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}({str(self.term)}{self.literals and ', '+str(self.literals)})"
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({repr(self.term)}{self.literals and ', '+repr(self.literals)})"
+
+    def __eq__(self, other) -> bool:
+        return id(self) == id(other) or (
+            type(self) == type(other) and self.term == other.term and self.literals == other.literals
+        )
+
+
+class UnboundPredicate(Unbound[T, BooleanExpression], BooleanExpression, ABC):
+    _term: UnboundTerm[T]
+    _literals: tuple[Literal[T], ...]
+
+    def __init__(self, term: UnboundTerm[T], *literals: Literal[T]):
+        self._term = term
+        self._literals = literals
+        self._validate_literals()
+
+    def _validate_literals(self):
+        if len(self.literals) != 1:
+            raise AttributeError(f"{self.__class__.__name__} must have exactly 1 literal.")
+
+    @property
+    def term(self) -> UnboundTerm[T]:
+        return self._term
+
+    @property
+    def literals(self) -> tuple[Literal[T], ...]:
+        return self._literals
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}({str(self.term)}{self.literals and ', '+str(self.literals)})"
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({repr(self.term)}{self.literals and ', '+repr(self.literals)})"
+
+    def __eq__(self, other) -> bool:
+        return id(self) == id(other) or (
+            type(self) == type(other) and self.term == other.term and self.literals == other.literals
+        )
 
 
 class And(BooleanExpression):
@@ -166,14 +265,14 @@ class And(BooleanExpression):
     def __eq__(self, other) -> bool:
         return id(self) == id(other) or (isinstance(other, And) and self.left == other.left and self.right == other.right)
 
-    def __invert__(self) -> "Or":
+    def __invert__(self) -> Or:
         return Or(~self.left, ~self.right)
 
     def __repr__(self) -> str:
         return f"And({repr(self.left)}, {repr(self.right)})"
 
     def __str__(self) -> str:
-        return f"({self.left} and {self.right})"
+        return f"And({str(self.left)}, {str(self.right)})"
 
 
 class Or(BooleanExpression):
@@ -204,14 +303,14 @@ class Or(BooleanExpression):
     def __eq__(self, other) -> bool:
         return id(self) == id(other) or (isinstance(other, Or) and self.left == other.left and self.right == other.right)
 
-    def __invert__(self) -> "And":
+    def __invert__(self) -> And:
         return And(~self.left, ~self.right)
 
     def __repr__(self) -> str:
         return f"Or({repr(self.left)}, {repr(self.right)})"
 
     def __str__(self) -> str:
-        return f"({self.left} or {self.right})"
+        return f"Or({str(self.left)}, {str(self.right)})"
 
 
 class Not(BooleanExpression):
@@ -239,119 +338,239 @@ class Not(BooleanExpression):
         return f"Not({repr(self.child)})"
 
     def __str__(self) -> str:
-        return f"(not {self.child})"
+        return f"Not({str(self.child)})"
 
 
+@dataclass(frozen=True)
 class AlwaysTrue(BooleanExpression, ABC, Singleton):
     """TRUE expression"""
 
-    def __invert__(self) -> "AlwaysFalse":
+    def __invert__(self) -> AlwaysFalse:
         return AlwaysFalse()
 
-    def __repr__(self) -> str:
-        return "AlwaysTrue()"
 
-    def __str__(self) -> str:
-        return "true"
-
-
+@dataclass(frozen=True)
 class AlwaysFalse(BooleanExpression, ABC, Singleton):
     """FALSE expression"""
 
-    def __invert__(self) -> "AlwaysTrue":
+    def __invert__(self) -> AlwaysTrue:
         return AlwaysTrue()
 
-    def __repr__(self) -> str:
-        return "AlwaysFalse()"
 
-    def __str__(self) -> str:
-        return "false"
+class IsNull(UnboundPredicate[T]):
+    def __invert__(self) -> NotNull:
+        return NotNull(self.term)
 
+    def _validate_literals(self):  # pylint: disable=W0238
+        if self.literals is not None:
+            raise AttributeError("Null is a unary predicate and takes no Literals.")
 
-class BoundReference:
-    """A reference bound to a field in a schema
-
-    Args:
-        field (NestedField): A referenced field in an Iceberg schema
-        accessor (Accessor): An Accessor object to access the value at the field's position
-    """
-
-    def __init__(self, field: NestedField, accessor: Accessor):
-        self._field = field
-        self._accessor = accessor
-
-    def __str__(self):
-        return f"BoundReference(field={repr(self.field)}, accessor={repr(self._accessor)})"
-
-    def __repr__(self):
-        return f"BoundReference(field={repr(self.field)}, accessor={repr(self._accessor)})"
-
-    @property
-    def field(self) -> NestedField:
-        """The referenced field"""
-        return self._field
-
-    def eval(self, struct: StructProtocol) -> Any:
-        """Returns the value at the referenced field's position in an object that abides by the StructProtocol
-
-        Args:
-            struct (StructProtocol): A row object that abides by the StructProtocol and returns values given a position
-
-        Returns:
-            Any: The value at the referenced field's position in `struct`
-        """
-        return self._accessor.get(struct)
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundIsNull[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundIsNull(bound_ref)
 
 
-class UnboundReference:
-    """A reference not yet bound to a field in a schema
+class BoundIsNull(BoundPredicate[T]):
+    def __invert__(self) -> BoundNotNull:
+        return BoundNotNull(self.term)
 
-    Args:
-        name (str): The name of the field
+    def _validate_literals(self):  # pylint: disable=W0238
+        if self.literals:
+            raise AttributeError("Null is a unary predicate and takes no Literals.")
 
-    Note:
-        An unbound reference is sometimes referred to as a "named" reference
-    """
 
-    def __init__(self, name: str):
-        if not name:
-            raise ValueError(f"Name cannot be null: {name}")
-        self._name = name
+class NotNull(UnboundPredicate[T]):
+    def __invert__(self) -> IsNull:
+        return IsNull(self.term)
 
-    def __str__(self) -> str:
-        return f"UnboundReference(name={repr(self.name)})"
+    def _validate_literals(self):  # pylint: disable=W0238
+        if self.literals:
+            raise AttributeError("NotNull is a unary predicate and takes no Literals.")
 
-    def __repr__(self) -> str:
-        return f"UnboundReference(name={repr(self.name)})"
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundNotNull[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundNotNull(bound_ref)
 
-    @property
-    def name(self) -> str:
-        return self._name
 
-    def bind(self, schema: Schema, case_sensitive: bool) -> BoundReference:
-        """Bind the reference to an Iceberg schema
+class BoundNotNull(BoundPredicate[T]):
+    def __invert__(self) -> BoundIsNull:
+        return BoundIsNull(self.term)
 
-        Args:
-            schema (Schema): An Iceberg schema
-            case_sensitive (bool): Whether to consider case when binding the reference to the field
+    def _validate_literals(self):  # pylint: disable=W0238
+        if self.literals:
+            raise AttributeError("NotNull is a unary predicate and takes no Literals.")
 
-        Raises:
-            ValueError: If an empty name is provided
 
-        Returns:
-            BoundReference: A reference bound to the specific field in the Iceberg schema
-        """
-        field = schema.find_field(name_or_id=self.name, case_sensitive=case_sensitive)
+class IsNaN(UnboundPredicate[T]):
+    def __invert__(self) -> NotNaN:
+        return NotNaN(self.term)
 
-        if not field:
-            raise ValueError(f"Cannot find field '{self.name}' in schema: {schema}")
+    def _validate_literals(self):  # pylint: disable=W0238
+        if self.literals:
+            raise AttributeError("IsNaN is a unary predicate and takes no Literals.")
 
-        accessor = schema.accessor_for_field(field.field_id)
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundIsNaN[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundIsNaN(bound_ref)
 
-        if not accessor:
-            raise ValueError(f"Cannot find accessor for field '{self.name}' in schema: {schema}")
 
-        return BoundReference(field=field, accessor=accessor)
+class BoundIsNaN(BoundPredicate[T]):
+    def __invert__(self) -> BoundNotNaN:
+        return BoundNotNaN(self.term)
+
+    def _validate_literals(self):  # pylint: disable=W0238
+        if self.literals:
+            raise AttributeError("IsNaN is a unary predicate and takes no Literals.")
+
+
+class NotNaN(UnboundPredicate[T]):
+    def __invert__(self) -> IsNaN:
+        return IsNaN(self.term)
+
+    def _validate_literals(self):  # pylint: disable=W0238
+        if self.literals:
+            raise AttributeError("NotNaN is a unary predicate and takes no Literals.")
+
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundNotNaN[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundNotNaN(bound_ref)
+
+
+class BoundNotNaN(BoundPredicate[T]):
+    def __invert__(self) -> BoundIsNaN:
+        return BoundIsNaN(self.term)
+
+    def _validate_literals(self):  # pylint: disable=W0238
+        if self.literals:
+            raise AttributeError("NotNaN is a unary predicate and takes no Literals.")
+
+
+class BoundIn(BoundPredicate[T]):
+    def _validate_literals(self):  # pylint: disable=W0238
+        if not self.literals:
+            raise AttributeError("BoundIn must contain at least 1 literal.")
+
+    def __invert__(self) -> BoundNotIn[T]:
+        return BoundNotIn(self.term, *self.literals)
+
+
+class In(UnboundPredicate[T]):
+    def _validate_literals(self):  # pylint: disable=W0238
+        if not self.literals:
+            raise AttributeError("In must contain at least 1 literal.")
+
+    def __invert__(self) -> NotIn[T]:
+        return NotIn(self.term, *self.literals)
+
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundIn[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundIn(bound_ref, *tuple(lit.to(bound_ref.field.field_type) for lit in self.literals))  # type: ignore
+
+
+class BoundNotIn(BoundPredicate[T]):
+    def _validate_literals(self):  # pylint: disable=W0238
+        if not self.literals:
+            raise AttributeError("BoundNotIn must contain at least 1 literal.")
+
+    def __invert__(self) -> BoundIn[T]:
+        return BoundIn(self.term, *self.literals)
+
+
+class NotIn(UnboundPredicate[T]):
+    def _validate_literals(self):  # pylint: disable=W0238
+        if not self.literals:
+            raise AttributeError("NotIn must contain at least 1 literal.")
+
+    def __invert__(self) -> In[T]:
+        return In(self.term, *self.literals)
+
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundNotIn[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundNotIn(bound_ref, *tuple(lit.to(bound_ref.field.field_type) for lit in self.literals))  # type: ignore
+
+
+class BoundEq(BoundPredicate[T]):
+    def __invert__(self) -> BoundNotEq[T]:
+        return BoundNotEq(self.term, *self.literals)
+
+
+class Eq(UnboundPredicate[T]):
+    def __invert__(self) -> NotEq[T]:
+        return NotEq(self.term, *self.literals)
+
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundEq[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundEq(bound_ref, self.literals[0].to(bound_ref.field.field_type))  # type: ignore
+
+
+class BoundNotEq(BoundPredicate[T]):
+    def __invert__(self) -> BoundEq[T]:
+        return BoundEq(self.term, *self.literals)
+
+
+class NotEq(UnboundPredicate[T]):
+    def __invert__(self) -> Eq[T]:
+        return Eq(self.term, *self.literals)
+
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundNotEq[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundNotEq(bound_ref, self.literals[0].to(bound_ref.field.field_type))  # type: ignore
+
+
+class BoundLt(BoundPredicate[T]):
+    def __invert__(self) -> BoundGtEq[T]:
+        return BoundGtEq(self.term, *self.literals)
+
+
+class Lt(UnboundPredicate[T]):
+    def __invert__(self) -> GtEq[T]:
+        return GtEq(self.term, *self.literals)
+
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundEq[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundLt(bound_ref, self.literals[0].to(bound_ref.field.field_type))  # type: ignore
+
+
+class BoundGtEq(BoundPredicate[T]):
+    def __invert__(self) -> BoundLt[T]:
+        return BoundLt(self.term, *self.literals)
+
+
+class GtEq(UnboundPredicate[T]):
+    def __invert__(self) -> Lt[T]:
+        return Lt(self.term, *self.literals)
+
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundEq[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundGtEq(bound_ref, self.literals[0].to(bound_ref.field.field_type))  # type: ignore
+
+
+class BoundGt(BoundPredicate[T]):
+    def __invert__(self) -> BoundLtEq[T]:
+        return BoundLtEq(self.term, *self.literals)
+
+
+class Gt(UnboundPredicate[T]):
+    def __invert__(self) -> LtEq[T]:
+        return LtEq(self.term, *self.literals)
+
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundEq[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundGt(bound_ref, self.literals[0].to(bound_ref.field.field_type))  # type: ignore
+
+
+class BoundLtEq(BoundPredicate[T]):
+    def __invert__(self) -> BoundGt[T]:
+        return BoundGt(self.term, *self.literals)
+
+
+class LtEq(UnboundPredicate[T]):
+    def __invert__(self) -> Gt[T]:
+        return Gt(self.term, *self.literals)
+
+    def bind(self, schema: Schema, case_sensitive: bool) -> BoundEq[T]:
+        bound_ref = self.term.bind(schema, case_sensitive)
+        return BoundLtEq(bound_ref, self.literals[0].to(bound_ref.field.field_type))  # type: ignore
 
 
 class BooleanExpressionVisitor(Generic[T], ABC):
@@ -455,9 +674,49 @@ def _(obj: And, visitor: BooleanExpressionVisitor[T]) -> T:
     return visitor.visit_and(left_result=left_result, right_result=right_result)
 
 
+@visit.register(In)
+def _(obj: In, visitor: BooleanExpressionVisitor[T]) -> T:
+    """Visit an In boolean expression with a concrete BooleanExpressionVisitor"""
+    return visitor.visit_unbound_predicate(predicate=obj)
+
+
 @visit.register(Or)
 def _(obj: Or, visitor: BooleanExpressionVisitor[T]) -> T:
     """Visit an Or boolean expression with a concrete BooleanExpressionVisitor"""
     left_result: T = visit(obj.left, visitor=visitor)
     right_result: T = visit(obj.right, visitor=visitor)
     return visitor.visit_or(left_result=left_result, right_result=right_result)
+
+
+class BindVisitor(BooleanExpressionVisitor[BooleanExpression]):
+    """Rewrites a boolean expression by replacing unbound references with references to fields in a struct schema
+
+    Args:
+      schema (Schema): A schema to use when binding the expression
+      case_sensitive (bool): Whether to consider case when binding a reference to a field in a schema, defaults to True
+    """
+
+    def __init__(self, schema: Schema, case_sensitive: bool = True) -> None:
+        self._schema = schema
+        self._case_sensitive = case_sensitive
+
+    def visit_true(self) -> BooleanExpression:
+        return AlwaysTrue()
+
+    def visit_false(self) -> BooleanExpression:
+        return AlwaysFalse()
+
+    def visit_not(self, child_result: BooleanExpression) -> BooleanExpression:
+        return Not(child=child_result)
+
+    def visit_and(self, left_result: BooleanExpression, right_result: BooleanExpression) -> BooleanExpression:
+        return And(left=left_result, right=right_result)
+
+    def visit_or(self, left_result: BooleanExpression, right_result: BooleanExpression) -> BooleanExpression:
+        return Or(left=left_result, right=right_result)
+
+    def visit_unbound_predicate(self, predicate) -> BooleanExpression:
+        return predicate.bind(self._schema, case_sensitive=self._case_sensitive)
+
+    def visit_bound_predicate(self, predicate) -> BooleanExpression:
+        raise TypeError(f"Found already bound predicate: {predicate}")

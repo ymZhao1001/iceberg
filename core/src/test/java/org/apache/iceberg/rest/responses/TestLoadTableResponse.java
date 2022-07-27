@@ -78,6 +78,7 @@ public class TestLoadTableResponse extends RequestResponseTestBase<LoadTableResp
         TableMetadata
             .buildFrom(
                 TableMetadata.newTableMetadata(SCHEMA_7, SPEC_5, SORT_ORDER_3, TEST_TABLE_LOCATION, TABLE_PROPS))
+            .discardChanges()
             .withMetadataLocation(TEST_METADATA_LOCATION)
             .build();
 
@@ -117,6 +118,18 @@ public class TestLoadTableResponse extends RequestResponseTestBase<LoadTableResp
         .addAllConfig(CONFIG)
         .build();
     assertRoundTripSerializesEquallyFrom(json, resp);
+  }
+
+  @Test
+  public void testMissingSchemaType() throws Exception {
+    // When the schema type (struct) is missing
+    String tableMetadataJson = readTableMetadataInputFile("TableMetadataV1MissingSchemaType.json");
+    AssertHelpers.assertThrows(
+        "Cannot parse type from json when there is no type",
+        IllegalArgumentException.class,
+        "Cannot parse type from json:",
+        () -> TableMetadataParser.fromJson(null, TEST_METADATA_LOCATION, tableMetadataJson)
+    );
   }
 
   @Test
