@@ -71,7 +71,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
   private final Schema expectedSchema;
   private final List<Expression> filterExpressions;
   private final boolean readTimestampWithoutZone;
-  private static boolean reportOutPartitioning = false;
+  private static boolean reportOutPartitioning;
 
   // lazy variables
   private StructType readSchema;
@@ -89,7 +89,7 @@ abstract class SparkScan extends SparkBatch implements Scan, SupportsReportStati
     this.expectedSchema = expectedSchema;
     this.filterExpressions = filters != null ? filters : Collections.emptyList();
     this.readTimestampWithoutZone = readConf.handleTimestampWithoutZone();
-    reportOutPartitioning = readConf.reportOutPartitioning();
+    this.reportOutPartitioning = readConf.reportOutPartitioning();
   }
 
   protected Table table() {

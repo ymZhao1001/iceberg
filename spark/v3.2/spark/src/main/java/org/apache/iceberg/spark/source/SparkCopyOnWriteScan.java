@@ -211,9 +211,4 @@ class SparkCopyOnWriteScan extends SparkScan implements SupportsRuntimeFiltering
         "IcebergCopyOnWriteScan(table=%s, type=%s, filters=%s, caseSensitive=%s)",
         table(), expectedSchema().asStruct(), filterExpressions(), caseSensitive());
   }
-
-  // @Override
-  // public Partitioning outputPartitioning() {
-  //   return new ClusteredColumnPartitioning(table(), 0);
-  // }
 }
